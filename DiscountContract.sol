@@ -3,9 +3,9 @@ pragma experimental ABIEncoderV2;
 
 contract DiscountContract {
 
-    event Inserted(address _sender, address _partner);
-    event Updated(address _sender, address _partner);
-    event Deleted(address _sender, address _partner);
+    // event Inserted(address indexed owner, address indexed partner);
+    // event Updated(address indexed owner, address indexed partner);
+    // event Deleted(address indexed owner, address indexed partner);
 
     struct LimitCondition {
         int256 value;
@@ -43,8 +43,10 @@ contract DiscountContract {
     }
     
     enum CallType { CallTypeMOCall, CallTypeMTCall, CallTypeMOSMS, CallTypeMTSMS, CallTypeData}
-    enum UnitType { UnitTypeKb, UnitTypeMb, UnitTypeMin, UnitTypeSec, UnitTypeEvent}    
+    enum UnitType { UnitTypeKb, UnitTypeMb, UnitTypeMin, UnitTypeSec, UnitTypeEvent}
+    enum AgreementStateType {AgreementPending, AgreementActive, AgreementExpired}
     
+
     struct Settlement {
         uint executionMoment;
         string name;
@@ -67,51 +69,68 @@ contract DiscountContract {
     // DiscountAgreement defines the discount agreement model    
     struct DiscountAgreement {
         // uint256 txHash;
+        address owner;
+        address partner;
         string name;
         string description;
-        uint state;
+        AgreementStateType state;
         uint256 startDate;
         uint256 endDate;
         bool exists;
     }
 
-    // map(owner, (partner, agreement))
-    mapping(address => DiscountAgreement) public agreements;
+    // map(partner, agreement)
+    mapping(address => mapping(address => DiscountAgreement)) public owner_agreements;
+    // map(partner, (owner, agreement))
+    mapping(address => mapping(address => DiscountAgreement)) partner_agreements;
 
 
     // The constructor
     constructor() public {
     }    
 
-    
     function Insert(address _partner, DiscountAgreement memory _agreement) public {
         // Create a discount agreement for an agreement owner with a partner discount map
-        _agreement.state = 0;
+        _agreement.state = AgreementStateType.AgreementPending;
         _agreement.exists = true;
-        agreements[_partner] = _agreement;
-        emit Inserted(msg.sender, _partner);
+        owner_agreements[msg.sender][_partner] = _agreement;
+        // emit Inserted(msg.sender, _partner);
     }
 
-    // Check if partner addfress is in agreements
-    function Exists(address _partner) public view returns(bool exists) {
-        return agreements[_partner].exists;
+    // Check if partner address is in owner_agreements
+    function Exists(address _owner, address _partner) public view returns(bool exists) {
+        return owner_agreements[_owner][_partner].exists;
     }
 
-    function Update(address _partner, DiscountAgreement memory _agreement) public returns(bool success) {
-        require(Exists(_partner));
-        agreements[_partner] = _agreement;
-        emit Updated(msg.sender, _partner);
+    function Update(DiscountAgreement memory _agreement) public returns(bool success) {
+        address _partner = _agreement.partner;
+        require(Exists(msg.sender, _partner));
+        owner_agreements[msg.sender][_partner] = _agreement;
+        partner_agreements[_partner][msg.sender] = _agreement;
+        // emit Updated(msg.sender, _partner);
         return true;
     }
 
-    function GetByPartner(address _partner) public view returns(DiscountAgreement memory agreement) {
-      require(Exists(_partner));
-      return (agreements[_partner]);
+    function GetOwnerAgreement(address _partner) public view returns(DiscountAgreement memory agreement) {
+      require(Exists(msg.sender, _partner));
+      return (owner_agreements[msg.sender][_partner]);
     }
     
-}
-
-
-
+    function GetPartnerAgreement(address _owner) public view returns(DiscountAgreement memory agreement) {
+      require(Exists(_owner, msg.sender));
+      return (partner_agreements[msg.sender][_owner]);
+    }    
     
+    // Approve - Approves given agreement
+    function Approve(address _owner) public view returns(bool success) {
+        bool ok = false;
+        require(Exists(_owner, msg.sender));
+        DiscountAgreement memory agreement = GetPartnerAgreement(_owner);
+        if (agreement.state == AgreementStateType.AgreementPending) {
+            agreement.state = AgreementStateType.AgreementActive;
+            ok = true;
+        }
+        return ok;
+    }
 
+}
