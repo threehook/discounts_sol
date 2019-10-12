@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-library DiscountStructs {
+contract DiscountStructs {
 
     struct LimitCondition {
         int256 value;
